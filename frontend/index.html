@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deal Finder Canada</title>
+    <meta name="description" content="A PWA to find the best deals on products in Canada.">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Theme color for browser UI -->
+    <meta name="theme-color" content="#4a90e2">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* Use Inter font family */
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        /* Simple spinner animation */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #4a90e2;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-2xl">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-blue-600">Deal Finder</h1>
+            <p class="text-gray-600 mt-2">Find the best prices across Canadian retailers.</p>
+        </header>
+
+        <main>
+            <!-- Search Form -->
+            <form id="search-form" class="flex items-center bg-white rounded-full shadow-lg overflow-hidden mb-8">
+                <input 
+                    type="search" 
+                    id="search-input"
+                    placeholder="e.g., 'iPhone 15' or 'Air Fryer'" 
+                    class="w-full px-6 py-4 text-lg text-gray-700 focus:outline-none"
+                    required
+                >
+                <button 
+                    type="submit" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 transition-colors duration-300"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </button>
+            </form>
+
+            <!-- Results Area -->
+            <div id="results-container">
+                <!-- Initial message -->
+                <div id="initial-message" class="text-center text-gray-500 py-10">
+                    <p>Enter a product above to start your search!</p>
+                </div>
+                <!-- Loading spinner -->
+                <div id="loading-spinner" class="hidden justify-center items-center py-10">
+                    <div class="spinner"></div>
+                </div>
+                <!-- No results message -->
+                <div id="no-results-message" class="hidden text-center text-gray-500 py-10">
+                    <p>No deals found for that product. Try another search!</p>
+                </div>
+                <!-- Deals list -->
+                <div id="deals-list" class="space-y-4">
+                    <!-- Deal items will be injected here by JavaScript -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- PWA Service Worker Registration ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    })
+                    .catch(err => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+
+        // --- Application Logic ---
+        const searchForm = document.getElementById('search-form');
+        const searchInput = document.getElementById('search-input');
+        const resultsContainer = document.getElementById('results-container');
+        const initialMessage = document.getElementById('initial-message');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const noResultsMessage = document.getElementById('no-results-message');
+        const dealsList = document.getElementById('deals-list');
+
+        searchForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const query = searchInput.value.trim();
+            if (query) {
+                performSearch(query);
+            }
+        });
+
+        /**
+         * Fetches deals from the backend API and displays them.
+         * @param {string} query - The product to search for.
+         */
+        async function performSearch(query) {
+            // 1. Update UI to show loading state
+            dealsList.innerHTML = '';
+            initialMessage.classList.add('hidden');
+            noResultsMessage.classList.add('hidden');
+            loadingSpinner.classList.remove('hidden');
+            loadingSpinner.classList.add('flex'); // Use flex to center it
+
+            try {
+                // 2. Make the API call to your backend server
+                // IMPORTANT: In the final deployment, you will replace 'http://localhost:3001'
+                // with your live backend URL from Render.
+                const response = await fetch(`http://localhost:3001/api/search?product=${encodeURIComponent(query)}`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const deals = await response.json();
+
+                // 3. Display the results
+                displayResults(deals);
+
+            } catch (error) {
+                console.error("Failed to fetch deals:", error);
+                dealsList.innerHTML = `<div class="text-center text-red-500 bg-red-100 p-4 rounded-lg">
+                    <p><strong>Error:</strong> Could not connect to the server.</p>
+                    <p>Please make sure the backend server is running.</p>
+                </div>`;
+            } finally {
+                // 4. Hide loading spinner regardless of outcome
+                loadingSpinner.classList.add('hidden');
+                loadingSpinner.classList.remove('flex');
+            }
+        }
+        
+        /**
+         * Renders the deal results in the DOM.
+         * @param {Array<object>} deals - An array of deal objects from the API.
+         */
+        function displayResults(deals) {
+            dealsList.innerHTML = ''; // Clear previous results
+
+            if (!deals || deals.length === 0) {
+                noResultsMessage.classList.remove('hidden');
+                return;
+            }
+            
+            noResultsMessage.classList.add('hidden');
+
+            deals.forEach(deal => {
+                const dealCard = `
+                    <div class="bg-white rounded-lg shadow-md p-4 flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-4 transition-transform duration-300 hover:scale-105">
+                        <div class="flex-grow">
+                            <h3 class="text-lg font-semibold text-gray-800">${deal.title}</h3>
+                            <p class="text-sm text-gray-500">${deal.retailer}</p>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <p class="text-xl font-bold text-green-600">$${deal.price.toFixed(2)}</p>
+                            <a href="${deal.url}" target="_blank" rel="noopener noreferrer" class="bg-blue-600 text-white px-4 py-2 rounded-full hover:bg-blue-700 transition-colors duration-300 text-sm font-medium">
+                                View Deal
+                            </a>
+                        </div>
+                    </div>
+                `;
+                dealsList.innerHTML += dealCard;
+            });
+        }
+    </script>
+
+</body>
+</html>
+
